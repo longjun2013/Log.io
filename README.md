@@ -1,5 +1,5 @@
-Log.io - Real-time log monitoring in your browser
-=================================================
+Log.io - Real-time log monitoring in your browser (Filter feature added)
+========================================================================
 
 Powered by [node.js](http://nodejs.org) + [socket.io](http://socket.io)
 

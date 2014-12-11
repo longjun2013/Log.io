@@ -10,8 +10,12 @@ config =
       '/var/log/nginx/access.log',
       '/var/log/nginx/error.log'
     ],
+	filter: [
+      '^a',
+      '^b'
+    ],
   server:
-    host: '0.0.0.0',
+    host: '0.0.0.0',；
     port: 28777
 
 # Sends the following TCP messages to the server:
@@ -36,32 +40,33 @@ changes, extracts new log messages, and emits 'new_log' events.
 
 ###
 class LogStream extends events.EventEmitter
-  constructor: (@name, @paths, @_log) ->
+  constructor: (@name, @paths, @_log, @filters) ->
 
   watch: ->
     @_log.info "Starting log stream: '#{@name}'"
-    @_watchFile path for path in @paths
+    @_watchFile path, index for path, index in @paths
     @
 
-  _watchFile: (path) ->
-      if not fs.existsSync path
-        @_log.error "File doesn't exist: '#{path}'"
-        setTimeout (=> @_watchFile path), 1000
-        return
-      @_log.info "Watching file: '#{path}'"
-      currSize = fs.statSync(path).size
-      watcher = fs.watch path, (event, filename) =>
-        if event is 'rename'
-          # File has been rotated, start new watcher
-          watcher.close()
-          @_watchFile path
-        if event is 'change'
-          # Capture file offset information for change event
-          fs.stat path, (err, stat) =>
-            @_readNewLogs path, stat.size, currSize
-            currSize = stat.size
+  _watchFile: (path, index) ->
+    if not fs.existsSync path
+      @_log.error "File doesn't exist: '#{path}'"
+      setTimeout (=>
+        @_watchFile path index), 1000
+      return
+    @_log.info "Watching file: '#{path}'"
+    currSize = fs.statSync(path).size
+    watcher = fs.watch path, (event, filename) =>
+      if event is 'rename'
+        # File has been rotated, start new watcher
+        watcher.close()
+        @_watchFile path index
+      if event is 'change'
+        # Capture file offset information for change event
+        fs.stat path, (err, stat) =>
+          @_readNewLogs path, stat.size, currSize, index
+          currSize = stat.size
 
-  _readNewLogs: (path, curr, prev) ->
+  _readNewLogs: (path, curr, prev, index) ->
     # Use file offset information to stream new log lines from file
     return if curr < prev
     rstream = fs.createReadStream path,
@@ -71,7 +76,8 @@ class LogStream extends events.EventEmitter
     # Emit 'new_log' event for every captured log line
     rstream.on 'data', (data) =>
       lines = data.split "\n"
-      @emit 'new_log', line for line in lines when line
+
+      @emit 'new_log', line for line in lines when not (new RegExp (@filters[@name])[index]).test line
 
 ###
 LogHarvester creates LogStreams and opens a persistent TCP connection to the server.
@@ -85,7 +91,7 @@ class LogHarvester
     {@nodeName, @server} = config
     @delim = config.delimiter ? '\r\n'
     @_log = config.logging ? winston
-    @logStreams = (new LogStream s, paths, @_log for s, paths of config.logStreams)
+    @logStreams = (new LogStream s, paths, @_log, config.filters for s, paths of config.logStreams)
 
   run: ->
     @_connect()
@@ -99,7 +105,8 @@ class LogHarvester
     @socket.on 'error', (error) =>
       @_connected = false
       @_log.error "Unable to connect server, trying again..."
-      setTimeout (=> @_connect()), 2000
+      setTimeout (=>
+        @_connect()), 2000
     @_log.info "Connecting to server..."
     @socket.connect @server.port, @server.host, =>
       @_connected = true
@@ -107,7 +114,7 @@ class LogHarvester
 
   _sendLog: (stream, msg) ->
     @_log.debug "Sending log: (#{stream.name}) #{msg}"
-    @_send '+log', stream.name, @nodeName, 'info', msg 
+    @_send '+log', stream.name, @nodeName, 'info', msg
 
   _announce: ->
     snames = (l.name for l in @logStreams).join ","
