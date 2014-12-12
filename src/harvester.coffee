@@ -10,12 +10,8 @@ config =
       '/var/log/nginx/access.log',
       '/var/log/nginx/error.log'
     ],
-	filter: [
-      '^a',
-      '^b'
-    ],
   server:
-    host: '0.0.0.0',；
+    host: '0.0.0.0',
     port: 28777
 
 # Sends the following TCP messages to the server:
@@ -51,7 +47,7 @@ class LogStream extends events.EventEmitter
     if not fs.existsSync path
       @_log.error "File doesn't exist: '#{path}'"
       setTimeout (=>
-        @_watchFile path index), 1000
+        @_watchFile path, index), 1000
       return
     @_log.info "Watching file: '#{path}'"
     currSize = fs.statSync(path).size
@@ -59,7 +55,7 @@ class LogStream extends events.EventEmitter
       if event is 'rename'
         # File has been rotated, start new watcher
         watcher.close()
-        @_watchFile path index
+        @_watchFile path, index
       if event is 'change'
         # Capture file offset information for change event
         fs.stat path, (err, stat) =>
@@ -77,7 +73,7 @@ class LogStream extends events.EventEmitter
     rstream.on 'data', (data) =>
       lines = data.split "\n"
 
-      @emit 'new_log', line for line in lines when not (new RegExp (@filters[@name])[index]).test line
+      @emit 'new_log', line for line in lines when (new RegExp (@filters[@name])[index]).test line
 
 ###
 LogHarvester creates LogStreams and opens a persistent TCP connection to the server.
