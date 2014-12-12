@@ -73,7 +73,7 @@ class LogStream extends events.EventEmitter
     rstream.on 'data', (data) =>
       lines = data.split "\n"
 
-      @emit 'new_log', line for line in lines when (new RegExp (@filters[@name])[index]).test line
+      @emit 'new_log', line for line in lines when not (new RegExp (@filters[@name])[index]).test line
 
 ###
 LogHarvester creates LogStreams and opens a persistent TCP connection to the server.
